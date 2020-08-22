@@ -33,10 +33,10 @@ impl std::io::Read for ClonableTcpStream {
     }
 }
 
-thread_local!(static MSP: RefCell<Msp> = RefCell::new(Msp::new(0, Duration::from_millis(0), false)));
+thread_local!(static MSP: RefCell<Option<Msp>> = RefCell::new(None));
 
 #[no_mangle]
-pub extern fn start(s: *const c_char) {
+pub extern fn open(s: *const c_char) {
     let c_str = unsafe {
         assert!(!s.is_null());
 
@@ -44,8 +44,8 @@ pub extern fn start(s: *const c_char) {
     };
     let stream = ClonableTcpStream(TcpStream::connect(c_str.to_str().unwrap()).unwrap());
     MSP.with(|msp_cell| {
-        let msp = msp_cell.borrow_mut();
-        msp.start(stream);
+        let msp = Some(Msp::open(stream, 0, Duration::from_millis(0), false));
+        msp_cell.replace(msp);
     });
 }
 
@@ -58,7 +58,7 @@ pub extern fn set_raw_rc(array: *const c_ushort, length: c_uint) {
             slice::from_raw_parts(array, length as usize)
         };
         block_on(async {
-            msp.set_raw_rc(channels.to_vec()).await.unwrap();
+            msp.as_ref().unwrap().set_raw_rc(channels.to_vec()).await.unwrap();
         });
     });
 }
